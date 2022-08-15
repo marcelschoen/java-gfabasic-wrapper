@@ -70,8 +70,17 @@ public class GfaBasicWrapper {
      */
     public static void compileGfaProgram(File lstSourceToConvert) {
 
-        HatariInstance building = new HatariInstance("building");
-
+        HatariInstance building = new HatariInstance("building",
+                true,
+                true,
+                true,
+                true,
+                false,
+                true,
+                MachineType.ste,
+                TOS.tos206,
+                ScreenMode.high,
+                Memory.mb4);
 
         try {
             System.out.println(">> Start emulator with LST file to convert in GFA editor: " + lstSourceToConvert.getAbsolutePath());
@@ -185,7 +194,17 @@ public class GfaBasicWrapper {
                                    ScreenMode mode,
                                    boolean blitter) {
 
-        HatariInstance testing = new HatariInstance("testing");
+        HatariInstance testing = new HatariInstance("testing",
+                true,
+                false,
+                true,
+                true,
+                true,
+                true,
+                MachineType.ste,
+                TOS.tos206,
+                ScreenMode.low,
+                Memory.mb1);
 
 
         try {
