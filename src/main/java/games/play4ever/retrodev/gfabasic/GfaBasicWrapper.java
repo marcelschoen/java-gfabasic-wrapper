@@ -53,12 +53,12 @@ public class GfaBasicWrapper {
         if (buildDirectory == null) {
             throw new IllegalArgumentException("'null' buildDirectory parameter not allowed!");
         }
-        if (!buildDirectory.isDirectory() || !buildDirectory.canRead()) {
-            throw new IllegalArgumentException("Build directory either not a directory or not accessible: " + buildDirectory.getAbsolutePath());
-        }
         if (!buildDirectory.exists()) {
             System.out.println("GFA build directory does not exist yet, create: " + buildDirectory.getAbsolutePath());
             buildDirectory.mkdirs();
+        }
+        if (!buildDirectory.isDirectory() || !buildDirectory.canRead()) {
+            throw new IllegalArgumentException("Build directory either not a directory or not accessible: " + buildDirectory.getAbsolutePath());
         }
         GfaBasicWrapper.buildDirectory = buildDirectory;
     }
@@ -94,10 +94,11 @@ public class GfaBasicWrapper {
 //            User32.INSTANCE.MoveWindow(emulatorWindow.getHWND(), 50, 50,
 //                    emulatorWindow.getLocAndSize().width, emulatorWindow.getLocAndSize().height, true);
 
+            new File(runtimeBuildFolder, "SOURCE.LST").delete();
             new File(runtimeBuildFolder, "SOURCE.BAK").delete();
             new File(runtimeBuildFolder, "SOURCE.GFA").delete();
             new File(runtimeBuildFolder, "TEST.PRG").delete();
-            File targetFile = new File(runtimeBuildFolder, lstSourceToConvert.getName());
+            File targetFile = new File(runtimeBuildFolder, "SOURCE.LST");
             FileUtil.copyFileTo(lstSourceToConvert, targetFile);
             SourceUtil.fixCrlfBytes(targetFile);
 
@@ -206,34 +207,14 @@ public class GfaBasicWrapper {
                 ScreenMode.low,
                 Memory.mb1);
 
+        System.out.println(">> Start emulator to test compiled program....");
+        DesktopWindow emulatorWindow = HatariWrapper.startEmulator(testing,
+                null,
+                null);
 
-        try {
-            System.out.println(">> Start emulator to test compiled program....");
-
-            DesktopWindow emulatorWindow = HatariWrapper.startEmulator(testing,
-                    null,
-                    null);
-
-            // Type "O" to open a file
-            /*
-            Thread.sleep(1000);
-            pressKeys(robot, emulatorWindow.getHWND(), KeyEvent.VK_O);
-            // In case there were unwanted "o" key presses, clear text field
-            for(int i=0; i<10; i++) {
-                pressKeys(robot, emulatorWindow.getHWND(), KeyEvent.VK_BACK_SPACE);
-            }
-
-            // Type "TEST.PRG" "ENTER" to run the compiled program
-            pressKeys(robot, emulatorWindow.getHWND(),
-                    KeyEvent.VK_T, KeyEvent.VK_E, KeyEvent.VK_S, KeyEvent.VK_T,
-                    KeyEvent.VK_PERIOD, KeyEvent.VK_P, KeyEvent.VK_R, KeyEvent.VK_G, KeyEvent.VK_ENTER);
-*/
-        } catch (Exception ex) {
-            ex.printStackTrace();
-            throw new RuntimeException("Failed to send command to emulator: " + ex, ex);
-        } finally {
-            HatariWrapper.stopEmulator(testing);
-        }
+        // NOTE: Using Robot keyboard input to open the freshly compiled "TEST.PRG" may
+        // not work well here, because this emulator instance is running at original hardware
+        // speed; this makes it difficult to make the keyboard input work reliably.
     }
 
     private static File getOrCreateRuntimeBuildFolder() {
