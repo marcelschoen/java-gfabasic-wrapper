@@ -86,30 +86,39 @@ public class GfaBasicWrapper {
             System.out.println(">> Start emulator with LST file to convert in GFA editor: " + lstSourceToConvert.getAbsolutePath());
             File runtimeBuildFolder = getOrCreateRuntimeBuildFolder();
             System.out.println(">> Runtime build folder: " + runtimeBuildFolder.getAbsolutePath() + " / exists: " + runtimeBuildFolder.exists());
-
             DesktopWindow emulatorWindow = HatariWrapper.startEmulator(building,
                     null,
                     runtimeBuildFolder);
+            // Wait a little to give TOS desktop time to become responsive
+            Thread.sleep(1500);
+            if(emulatorWindow == null) {
+                emulatorWindow = new DummyDesktopWindow();
+            }
 
 //            User32.INSTANCE.MoveWindow(emulatorWindow.getHWND(), 50, 50,
 //                    emulatorWindow.getLocAndSize().width, emulatorWindow.getLocAndSize().height, true);
 
+            System.out.println(">> Clean up build folder...");
             new File(runtimeBuildFolder, "SOURCE.LST").delete();
             new File(runtimeBuildFolder, "SOURCE.BAK").delete();
-            new File(runtimeBuildFolder, "SOURCE.GFA").delete();
-            new File(runtimeBuildFolder, "TEST.PRG").delete();
+            File sourceGfa = new File(runtimeBuildFolder, "SOURCE.GFA");
+            sourceGfa.delete();
+            File testPrg = new File(runtimeBuildFolder, "TEST.PRG");
+            testPrg.delete();
+
+            System.out.println(">> Copy runtime build folder...");
             File targetFile = new File(runtimeBuildFolder, "SOURCE.LST");
             FileUtil.copyFileTo(lstSourceToConvert, targetFile);
+            System.out.println(">> Fix CRLF in source file...");
             SourceUtil.fixCrlfBytes(targetFile);
 
+            // *****************************************************************************************
+            // Step 1: Start GFA BASIC Editor to load text file and save as ".GFA" file
+            // *****************************************************************************************
 
             // Type "O" to open a file
-            Thread.sleep(1000);
             pressKeys(robot, emulatorWindow.getHWND(), KeyEvent.VK_O);
-            // In case there were unwanted "o" key presses, clear text field
-            for (int i = 0; i < 10; i++) {
-                pressKeys(robot, emulatorWindow.getHWND(), KeyEvent.VK_BACK_SPACE);
-            }
+            clearInputFieldWithBackspaces(emulatorWindow);
 
             // Type "GFABASIC.PRG" "ENTER" to open the GFA BASIC editor
             pressKeys(robot, emulatorWindow.getHWND(),
@@ -121,6 +130,7 @@ public class GfaBasicWrapper {
 
             // Type F2 to open "Merge" screen
             pressKeys(robot, emulatorWindow.getHWND(), KeyEvent.VK_F2);
+            clearInputFieldWithBackspaces(emulatorWindow);
 
             // Type "SOURCE.LST"
             pressKeys(robot, emulatorWindow.getHWND(),
@@ -129,7 +139,8 @@ public class GfaBasicWrapper {
                     KeyEvent.VK_ENTER);
 
             // Wait a little to give the emulator time to finish loading the LST file
-            Thread.sleep(500);
+            waitForFileToBeWritten(sourceGfa);
+//            Thread.sleep(500);
 
             // Type Shift + F1 to open "Save" screen
             pressKeysTogether(robot, emulatorWindow.getHWND(), KeyEvent.VK_SHIFT, KeyEvent.VK_F1);
@@ -144,13 +155,14 @@ public class GfaBasicWrapper {
             pressKeysTogether(robot, emulatorWindow.getHWND(), KeyEvent.VK_SHIFT, KeyEvent.VK_F3);
             pressKeys(robot, emulatorWindow.getHWND(), KeyEvent.VK_ENTER);
 
+            // *****************************************************************************************
+            // Step 2: Start GFA Compiler Menu and run compiler and linker
+            // *****************************************************************************************
+
             // Type "O" to open a file again
-            Thread.sleep(500);
+            Thread.sleep(1000);
             pressKeys(robot, emulatorWindow.getHWND(), KeyEvent.VK_O);
-            // In case there were unwanted "o" key presses, clear text field
-            for (int i = 0; i < 10; i++) {
-                pressKeys(robot, emulatorWindow.getHWND(), KeyEvent.VK_BACK_SPACE);
-            }
+            clearInputFieldWithBackspaces(emulatorWindow);
 
             // Type "MENU.PRG" "ENTER" to open the GFA BASIC compiler
             pressKeys(robot, emulatorWindow.getHWND(),
@@ -162,6 +174,7 @@ public class GfaBasicWrapper {
 
             // Open the file selection dialog
             pressKeysTogether(robot, emulatorWindow.getHWND(), KeyEvent.VK_CONTROL, KeyEvent.VK_S);
+            clearInputFieldWithBackspaces(emulatorWindow);
 
             // Select the GFA source file to compile
             pressKeys(robot, emulatorWindow.getHWND(),
@@ -174,7 +187,8 @@ public class GfaBasicWrapper {
             pressKeysTogether(robot, emulatorWindow.getHWND(), KeyEvent.VK_CONTROL, KeyEvent.VK_C);
 
             // Wait a little to make sure the compiler has completed its work.
-            Thread.sleep(2000);
+            waitForFileToBeWritten(testPrg);
+//            Thread.sleep(2000);
 
             // Link
             pressKeysTogether(robot, emulatorWindow.getHWND(), KeyEvent.VK_CONTROL, KeyEvent.VK_L);
@@ -187,6 +201,26 @@ public class GfaBasicWrapper {
             throw new RuntimeException("Failed to send command to emulator: " + ex, ex);
         } finally {
             HatariWrapper.stopEmulator(building);
+        }
+    }
+
+    private static void waitForFileToBeWritten(File file) throws Exception {
+        int remainsSameCounter = 0;
+        while(remainsSameCounter == 5) {
+            long length = file.length();
+            Thread.sleep(20);
+            if(file.length() == length) {
+                remainsSameCounter ++;
+            } else {
+                remainsSameCounter = 0;
+            }
+        }
+    }
+
+    private static void clearInputFieldWithBackspaces(DesktopWindow emulatorWindow) {
+        // In case there were unwanted "o" key presses, clear text field
+        for (int i = 0; i < 10; i++) {
+            pressKeys(robot, emulatorWindow.getHWND(), KeyEvent.VK_BACK_SPACE);
         }
     }
 
@@ -239,11 +273,14 @@ public class GfaBasicWrapper {
      */
     private static void pressKeys(Robot robot, WinDef.HWND window, int... keys) {
         try {
-            User32.INSTANCE.SetFocus(window);
-            User32.INSTANCE.SetForegroundWindow(window);
+            if(window != null) {
+                User32.INSTANCE.SetFocus(window);
+                User32.INSTANCE.SetForegroundWindow(window);
+            }
             for (int key : keys) {
                 robot.keyPress(key);
                 robot.keyRelease(key);
+                Thread.sleep(50);
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -265,11 +302,15 @@ public class GfaBasicWrapper {
      */
     private static void pressKeysTogether(Robot robot, WinDef.HWND window, int... keys) {
         try {
-            User32.INSTANCE.SetFocus(window);
-            User32.INSTANCE.SetForegroundWindow(window);
+            if(window != null) {
+                User32.INSTANCE.SetFocus(window);
+                User32.INSTANCE.SetForegroundWindow(window);
+            }
             for (int key : keys) {
                 robot.keyPress(key);
+                //Thread.sleep(50);
             }
+            Thread.sleep(50);
         } catch (Exception e) {
             throw new RuntimeException("** Failed to enter keyboard presses **");
         } finally {
