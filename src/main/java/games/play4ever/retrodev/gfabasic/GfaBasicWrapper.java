@@ -64,7 +64,98 @@ public class GfaBasicWrapper {
     }
 
     /**
-     * Starts the Hatari emulator and then TODO
+     * Starts the Hatari emulator, opens the GFA BASIC editor and then executes the
+     * given GFA BASIC program directly in the GFA editor (interpreted).
+     *
+     * @param lstSourceToRun The ASCII source file.
+     * @param instance The instance configuration to use for the run.
+     */
+    public static void runGfaProgram(File lstSourceToRun, HatariInstance instance) {
+
+
+        try {
+            System.out.println(">> Start emulator with LST file to execute in GFA editor: " + lstSourceToRun.getAbsolutePath());
+            File runtimeBuildFolder = getOrCreateRuntimeBuildFolder();
+            System.out.println(">> Runtime build folder: " + runtimeBuildFolder.getAbsolutePath() + " / exists: " + runtimeBuildFolder.exists());
+            DesktopWindow emulatorWindow = HatariWrapper.startEmulator(instance,
+                    null,
+                    runtimeBuildFolder);
+
+            Thread.sleep(500);
+            // Press SPACE to speed up start
+            pressKeys(robot, emulatorWindow.getHWND(), KeyEvent.VK_SPACE);
+            // Wait a little to give TOS desktop time to become responsive
+            Thread.sleep(10000);
+
+            if(emulatorWindow == null) {
+                emulatorWindow = new DummyDesktopWindow();
+            }
+
+//            User32.INSTANCE.MoveWindow(emulatorWindow.getHWND(), 50, 50,
+//                    emulatorWindow.getLocAndSize().width, emulatorWindow.getLocAndSize().height, true);
+
+            System.out.println(">> Clean up build folder...");
+            new File(runtimeBuildFolder, "SOURCE.LST").delete();
+
+            System.out.println(">> Copy runtime build folder...");
+            File targetFile = new File(runtimeBuildFolder, "SOURCE.LST");
+            FileUtil.copyFileTo(lstSourceToRun, targetFile);
+            System.out.println(">> Fix CRLF in source file...");
+            SourceUtil.fixCrlfBytes(targetFile);
+
+            // *****************************************************************************************
+            // Step 1: Start GFA BASIC Editor to load text file and save as ".GFA" file
+            // *****************************************************************************************
+
+            // Type "O" to open a file
+            pressKeys(robot, emulatorWindow.getHWND(), KeyEvent.VK_O);
+            clearInputFieldWithBackspaces(emulatorWindow);
+
+            // Type "GFABASIC.PRG" "ENTER" to open the GFA BASIC editor
+            pressKeys(robot, emulatorWindow.getHWND(),
+                    KeyEvent.VK_G, KeyEvent.VK_F, KeyEvent.VK_A, KeyEvent.VK_B, KeyEvent.VK_A, KeyEvent.VK_S, KeyEvent.VK_I, KeyEvent.VK_C,
+                    KeyEvent.VK_PERIOD, KeyEvent.VK_P, KeyEvent.VK_R, KeyEvent.VK_G, KeyEvent.VK_ENTER);
+
+            // Wait a little to give the emulator time to finish loading the GFA BASIC editor
+            Thread.sleep(500);
+
+            // Type F2 to open "Merge" screen
+            pressKeys(robot, emulatorWindow.getHWND(), KeyEvent.VK_F2);
+            clearInputFieldWithBackspaces(emulatorWindow);
+
+            // Type "SOURCE.LST"
+            pressKeys(robot, emulatorWindow.getHWND(),
+                    KeyEvent.VK_S, KeyEvent.VK_O, KeyEvent.VK_U, KeyEvent.VK_R, KeyEvent.VK_C, KeyEvent.VK_E,
+                    KeyEvent.VK_PERIOD, KeyEvent.VK_L, KeyEvent.VK_S, KeyEvent.VK_T,
+                    KeyEvent.VK_ENTER);
+
+            // Wait a little to give the emulator time to finish loading the LST file
+            Thread.sleep(500);
+
+            // Type Shift + F10 to run the program
+            pressKeysTogether(robot, emulatorWindow.getHWND(), KeyEvent.VK_SHIFT, KeyEvent.VK_F10);
+
+            System.out.println(">> Program started...");
+
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            throw new RuntimeException("Failed to send command to emulator: " + ex, ex);
+        }
+
+    }
+
+    /**
+     * Starts the Hatari emulator and then does the following:
+     * <ul>
+     *     <li>Copy the given source file into the build folder as "SOURCE.LST" (also fixing CRLF line endings)</li>
+     *     <li>Open the GFA BASIC editor</li>
+     *     <li>Read the text source file "SOURCE.LST" using the "Merge" function</li>
+     *     <li>Save the file as "SOURCE.GFA" and quit the GFA BASIC editor</li>
+     *     <li>Open the GFA BASIC compiler ("MENU.PRG")</li>
+     *     <li>Select the "SOURCE.GFA" file</li>
+     *     <li>Run the compiler followed by the linker</li>
+     * </ul>
+     * If everything goes well, the result is a new "TEST.PRG" file in the build folder.
      *
      * @param lstSourceToConvert The ASCII source file.
      */
@@ -195,6 +286,8 @@ public class GfaBasicWrapper {
 
             // Wait a little to make sure the linker has completed its work.
             Thread.sleep(2000);
+
+            System.out.println(">> Build successful, compiled PRG file created: " + testPrg.getAbsolutePath());
 
         } catch (Exception ex) {
             ex.printStackTrace();
